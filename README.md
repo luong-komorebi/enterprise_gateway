@@ -17,9 +17,9 @@ including Apache Spark managed by YARN, IBM Spectrum Conductor, Kubernetes or Do
 
 It provides out of the box support for the following kernels:
 
-- Python using IPython kernel
-- R using IRkernel
-- Scala using Apache Toree kernel
+- Python using IPython kernel.
+- R using IRkernel.
+- Scala using Apache Toree kernel.
 
 Full Documentation for Jupyter Enterprise Gateway can be found [here](https://jupyter-enterprise-gateway.readthedocs.io/en/latest)
 
