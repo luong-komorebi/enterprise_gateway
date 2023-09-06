@@ -54,10 +54,11 @@ class RKernelBaseTestCase(TestBase):
         self.kernel.start_interrupt_thread()
 
         # Build the code list to interrupt, in this case, its a sleep call.
-        interrupted_code = []
-        interrupted_code.append('write("begin",stdout())\n')
-        interrupted_code.append("Sys.sleep(30)\n")
-        interrupted_code.append('write("end",stdout())\n')
+        interrupted_code = [
+            'write("begin",stdout())\n',
+            "Sys.sleep(30)\n",
+            'write("end",stdout())\n',
+        ]
         interrupted_result, has_error = self.kernel.execute(interrupted_code)
 
         # Ensure the result indicates an interrupt occurred

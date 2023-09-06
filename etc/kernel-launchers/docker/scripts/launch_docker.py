@@ -1,4 +1,5 @@
 """Launches a containerized kernel."""
+
 import argparse
 import os
 import sys
@@ -10,10 +11,16 @@ from docker.types import EndpointSpec, RestartPolicy
 urllib3.disable_warnings()
 
 # Set env to False if the container should be left around for debug purposes, etc.
-remove_container = bool(
-    os.getenv("REMOVE_CONTAINER", os.getenv("EG_REMOVE_CONTAINER", "True")).lower() == "true"
+remove_container = (
+    os.getenv(
+        "REMOVE_CONTAINER", os.getenv("EG_REMOVE_CONTAINER", "True")
+    ).lower()
+    == "true"
 )
-swarm_mode = bool(os.getenv("DOCKER_MODE", os.getenv("EG_DOCKER_MODE", "swarm")).lower() == "swarm")
+swarm_mode = (
+    os.getenv("DOCKER_MODE", os.getenv("EG_DOCKER_MODE", "swarm")).lower()
+    == "swarm"
+)
 
 
 def launch_docker_kernel(
@@ -33,23 +40,24 @@ def launch_docker_kernel(
     docker_network = os.environ.get("DOCKER_NETWORK", os.environ.get("EG_DOCKER_NETWORK", "bridge"))
 
     # Build labels - these will be modelled similar to kubernetes: kernel_id, component, app, ...
-    labels = {}
-    labels["kernel_id"] = kernel_id
-    labels["component"] = "kernel"
-    labels["app"] = "enterprise-gateway"
-
+    labels = {
+        "kernel_id": kernel_id,
+        "component": "kernel",
+        "app": "enterprise-gateway",
+    }
     # Capture env parameters...
-    param_env = {}
-    param_env["PORT_RANGE"] = port_range
-    param_env["PUBLIC_KEY"] = public_key
-    param_env["RESPONSE_ADDRESS"] = response_addr
-    param_env["KERNEL_SPARK_CONTEXT_INIT_MODE"] = spark_context_init_mode
+    param_env = {
+        "PORT_RANGE": port_range,
+        "PUBLIC_KEY": public_key,
+        "RESPONSE_ADDRESS": response_addr,
+        "KERNEL_SPARK_CONTEXT_INIT_MODE": spark_context_init_mode,
+    }
     if kernel_class_name:
         param_env["KERNEL_CLASS_NAME"] = kernel_class_name
 
     # Since the environment is specific to the kernel (per env stanza of kernelspec, KERNEL_ and EG_CLIENT_ENVS)
     # just add the env here.
-    param_env.update(os.environ)
+    param_env |= os.environ
     param_env.pop(
         "PATH"
     )  # Let the image PATH be used.  Since this is relative to images, we're probably safe.
@@ -58,16 +66,15 @@ def launch_docker_kernel(
     group = param_env.get("KERNEL_GID")
 
     # setup common args
-    kwargs = {}
-    kwargs["name"] = container_name
-    kwargs["hostname"] = container_name
-    kwargs["user"] = user
-    kwargs["labels"] = labels
-
+    kwargs = {
+        "name": container_name,
+        "hostname": container_name,
+        "user": user,
+        "labels": labels,
+    }
     client = DockerClient.from_env()
     if swarm_mode:
-        networks = []
-        networks.append(docker_network)
+        networks = [docker_network]
         # mounts = list()  # Enable if necessary
         # mounts.append("/usr/local/share/jupyter/kernels:/usr/local/share/jupyter/kernels:ro")
         endpoint_spec = EndpointSpec(mode="dnsrr")

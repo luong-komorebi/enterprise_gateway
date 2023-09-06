@@ -27,8 +27,7 @@ def generate_kernel_custom_resource_yaml(kernel_crd_template, keywords):
             default=True,
         ),
     )
-    k8s_yaml = j_env.get_template("/" + kernel_crd_template + ".yaml.j2").render(**keywords)
-    return k8s_yaml
+    return j_env.get_template(f"/{kernel_crd_template}.yaml.j2").render(**keywords)
 
 
 def extend_operator_env(op_def: dict, sub_spec: str) -> dict:
@@ -59,15 +58,16 @@ def launch_custom_resource_kernel(
     """Launch a custom resource kernel."""
     config.load_incluster_config()
 
-    keywords = {}
+    keywords = {
+        "eg_port_range": port_range,
+        "eg_public_key": public_key,
+        "eg_response_address": response_addr,
+        "kernel_id": kernel_id,
+        "kernel_name": os.path.basename(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        ),
+    }
 
-    keywords["eg_port_range"] = port_range
-    keywords["eg_public_key"] = public_key
-    keywords["eg_response_address"] = response_addr
-    keywords["kernel_id"] = kernel_id
-    keywords["kernel_name"] = os.path.basename(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    )
     keywords["spark_context_initialization_mode"] = spark_context_init_mode
 
     for name, value in os.environ.items():

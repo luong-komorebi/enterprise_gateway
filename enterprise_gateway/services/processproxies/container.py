@@ -1,4 +1,5 @@
 """Code related to managing kernels running in containers."""
+
 # Copyright (c) Jupyter Development Team.
 # Distributed under the terms of the Modified BSD License.
 
@@ -28,7 +29,9 @@ default_kernel_gid = "100"  # users group is the default
 prohibited_uids = os.getenv("EG_PROHIBITED_UIDS", "0").split(",")
 prohibited_gids = os.getenv("EG_PROHIBITED_GIDS", "0").split(",")
 
-mirror_working_dirs = bool(os.getenv("EG_MIRROR_WORKING_DIRS", "false").lower() == "true")
+mirror_working_dirs = (
+    os.getenv("EG_MIRROR_WORKING_DIRS", "false").lower() == "true"
+)
 
 # Get the globally-configured default images.  Defaulting to None if not set.
 default_kernel_image = os.getenv("EG_KERNEL_IMAGE")
@@ -96,9 +99,7 @@ class ContainerProcessProxy(RemoteProcessProxy):
         self.ip = local_ip
 
         self.log.info(
-            "{}: kernel launched. Kernel image: {}, KernelID: {}, cmd: '{}'".format(
-                self.__class__.__name__, self.kernel_image, self.kernel_id, kernel_cmd
-            )
+            f"{self.__class__.__name__}: kernel launched. Kernel image: {self.kernel_image}, KernelID: {self.kernel_id}, cmd: '{kernel_cmd}'"
         )
 
         await self.confirm_remote_startup()
@@ -111,19 +112,11 @@ class ContainerProcessProxy(RemoteProcessProxy):
 
         if kernel_uid in prohibited_uids:
             http_status_code = 403
-            error_message = (
-                "Kernel's UID value of '{}' has been denied via EG_PROHIBITED_UIDS!".format(
-                    kernel_uid
-                )
-            )
+            error_message = f"Kernel's UID value of '{kernel_uid}' has been denied via EG_PROHIBITED_UIDS!"
             self.log_and_raise(http_status_code=http_status_code, reason=error_message)
         elif kernel_gid in prohibited_gids:
             http_status_code = 403
-            error_message = (
-                "Kernel's GID value of '{}' has been denied via EG_PROHIBITED_GIDS!".format(
-                    kernel_gid
-                )
-            )
+            error_message = f"Kernel's GID value of '{kernel_gid}' has been denied via EG_PROHIBITED_GIDS!"
             self.log_and_raise(http_status_code=http_status_code, reason=error_message)
 
         # Ensure the kernel's env has what it needs in case they came from defaults
@@ -142,15 +135,8 @@ class ContainerProcessProxy(RemoteProcessProxy):
         -------
         None if the container cannot be found or its in an initial state. Otherwise False.
         """
-        result = False
-
         container_status = self.get_container_status(None)
-        # Do not check whether container_status is None
-        # EG couldn't restart kernels although connections exists.
-        # See https://github.com/jupyter-server/enterprise_gateway/issues/827
-        if container_status in self.get_initial_states():
-            result = None
-        return result
+        return None if container_status in self.get_initial_states() else False
 
     def send_signal(self, signum: int) -> bool | None:
         """Send signal `signum` to container.
@@ -176,12 +162,7 @@ class ContainerProcessProxy(RemoteProcessProxy):
         -------
         None if the container is gracefully terminated, False otherwise.
         """
-        result = None
-
-        if self.container_name:  # We only have something to terminate if we have a name
-            result = self.terminate_container_resources()
-
-        return result
+        return self.terminate_container_resources() if self.container_name else None
 
     def shutdown_listener(self):
         """Shut down the listener."""
@@ -199,20 +180,18 @@ class ContainerProcessProxy(RemoteProcessProxy):
             i += 1
             await self.handle_timeout()
 
-            container_status = self.get_container_status(i)
-            if container_status:
+            if container_status := self.get_container_status(i):
                 if container_status in self.get_error_states():
                     self.log_and_raise(
                         http_status_code=500,
                         reason=f"Error starting kernel container; status: '{container_status}'.",
                     )
-                else:
-                    if self.assigned_host:
-                        ready_to_connect = await self.receive_connection_info()
-                        self.pid = (
-                            0  # We won't send process signals for kubernetes lifecycle management
-                        )
-                        self.pgid = 0
+                elif self.assigned_host:
+                    ready_to_connect = await self.receive_connection_info()
+                    self.pid = (
+                        0  # We won't send process signals for kubernetes lifecycle management
+                    )
+                    self.pgid = 0
             else:
                 self.detect_launch_failure()
 

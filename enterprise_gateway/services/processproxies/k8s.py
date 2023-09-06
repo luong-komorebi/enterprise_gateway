@@ -1,4 +1,5 @@
 """Code related to managing kernels running in Kubernetes clusters."""
+
 # Copyright (c) Jupyter Development Team.
 # Distributed under the terms of the Modified BSD License.
 
@@ -26,7 +27,9 @@ default_kernel_service_account_name = os.environ.get(
     "EG_DEFAULT_KERNEL_SERVICE_ACCOUNT_NAME", "default"
 )
 kernel_cluster_role = os.environ.get("EG_KERNEL_CLUSTER_ROLE", "cluster-admin")
-share_gateway_namespace = bool(os.environ.get("EG_SHARED_NAMESPACE", "False").lower() == "true")
+share_gateway_namespace = (
+    os.environ.get("EG_SHARED_NAMESPACE", "False").lower() == "true"
+)
 kpt_dir = os.environ.get("EG_POD_TEMPLATE_DIR", "/tmp")  # noqa
 
 config.load_incluster_config()
@@ -84,7 +87,7 @@ class KubernetesProcessProxy(ContainerProcessProxy):
         # Locates the kernel pod using the kernel_id selector.  If the phase indicates Running, the pod's IP
         # is used for the assigned_ip.
         pod_status = ""
-        kernel_label_selector = "kernel_id=" + self.kernel_id + ",component=kernel"
+        kernel_label_selector = f"kernel_id={self.kernel_id},component=kernel"
         ret = client.CoreV1Api().list_namespaced_pod(
             namespace=self.kernel_namespace, label_selector=kernel_label_selector
         )
@@ -124,13 +127,8 @@ class KubernetesProcessProxy(ContainerProcessProxy):
         v1_pod = client.CoreV1Api().delete_namespaced_pod(
             namespace=self.kernel_namespace, body=body, name=self.container_name
         )
-        status = None
-        if v1_pod and v1_pod.status:
-            status = v1_pod.status.phase
-
-        result = status in termination_stati
-
-        return result
+        status = v1_pod.status.phase if v1_pod and v1_pod.status else None
+        return status in termination_stati
 
     def terminate_container_resources(self) -> bool | None:
         """Terminate any artifacts created on behalf of the container's lifetime."""
@@ -168,13 +166,12 @@ class KubernetesProcessProxy(ContainerProcessProxy):
                 body = client.V1DeleteOptions(
                     grace_period_seconds=0, propagation_policy="Background"
                 )
-                v1_status = client.CoreV1Api().delete_namespace(
+                if v1_status := client.CoreV1Api().delete_namespace(
                     name=self.kernel_namespace, body=body
-                )
-                status = None
-                if v1_status:
+                ):
                     status = v1_status.status
-
+                else:
+                    status = None
                 if status and any(s in status for s in termination_stati):
                     result = True
 
@@ -206,7 +203,7 @@ class KubernetesProcessProxy(ContainerProcessProxy):
             )
 
         # Check if there's a kernel pod template file for this kernel and silently delete it.
-        kpt_file = kpt_dir + "/kpt_" + self.kernel_id
+        kpt_file = f"{kpt_dir}/kpt_{self.kernel_id}"
         try:
             os.remove(kpt_file)
         except OSError:
@@ -217,7 +214,7 @@ class KubernetesProcessProxy(ContainerProcessProxy):
     def _determine_kernel_pod_name(self, **kwargs: dict[str, Any] | None) -> str:
         pod_name = kwargs["env"].get("KERNEL_POD_NAME")
         if pod_name is None:
-            pod_name = KernelSessionManager.get_kernel_username(**kwargs) + "-" + self.kernel_id
+            pod_name = f"{KernelSessionManager.get_kernel_username(**kwargs)}-{self.kernel_id}"
 
         # Rewrite pod_name to be compatible with DNS name convention
         # And put back into env since kernel needs this
@@ -245,9 +242,7 @@ class KubernetesProcessProxy(ContainerProcessProxy):
             if share_gateway_namespace:  # if so, set to EG namespace
                 namespace = enterprise_gateway_namespace
                 self.log.warning(
-                    "Shared namespace has been configured.  All kernels will reside in EG namespace: {}".format(
-                        namespace
-                    )
+                    f"Shared namespace has been configured.  All kernels will reside in EG namespace: {namespace}"
                 )
             else:
                 namespace = self._create_kernel_namespace(service_account_name)
@@ -303,9 +298,7 @@ class KubernetesProcessProxy(ContainerProcessProxy):
                 self.log.info(f"Re-using kernel namespace: {namespace}")
             else:
                 if self.delete_kernel_namespace:
-                    reason = "Error occurred creating role binding for namespace '{}': {}".format(
-                        namespace, err
-                    )
+                    reason = f"Error occurred creating role binding for namespace '{namespace}': {err}"
                     # delete the namespace since we'll be using the EG namespace...
                     body = client.V1DeleteOptions(
                         grace_period_seconds=0, propagation_policy="Background"
@@ -348,9 +341,7 @@ class KubernetesProcessProxy(ContainerProcessProxy):
             namespace=namespace, body=body
         )
         self.log.info(
-            "Created kernel role-binding '{}' in namespace: {} for service account: {}".format(
-                role_binding_name, namespace, service_account_name
-            )
+            f"Created kernel role-binding '{role_binding_name}' in namespace: {namespace} for service account: {service_account_name}"
         )
 
     def get_process_info(self) -> dict[str, Any]:

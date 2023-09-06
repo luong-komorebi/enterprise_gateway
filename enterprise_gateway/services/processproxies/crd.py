@@ -64,15 +64,13 @@ class CustomResourceProcessProxy(KubernetesProcessProxy):
         application_state = ""
 
         with suppress(Exception):
-            custom_resource = client.CustomObjectsApi().get_namespaced_custom_object(
+            if custom_resource := client.CustomObjectsApi().get_namespaced_custom_object(
                 self.group,
                 self.version,
                 self.kernel_namespace,
                 self.plural,
                 self.kernel_resource_name,
-            )
-
-            if custom_resource:
+            ):
                 application_state = custom_resource['status']['applicationState']['state'].lower()
 
                 if application_state in self.get_error_states():
@@ -115,18 +113,16 @@ class CustomResourceProcessProxy(KubernetesProcessProxy):
             propagation_policy="Background",
         )
 
-        result = delete_status and delete_status.get("status", None) in termination_stati
-
-        return result
+        return delete_status and delete_status.get("status", None) in termination_stati
 
     def get_initial_states(self) -> set:
         """Return list of states in lowercase indicating container is starting (includes running)."""
         return ["submitted", "pending", "running"]
 
     def _get_exception_text(self, error_message):
-        match = re.search(r'Exception\s*:\s*(.*)', error_message, re.MULTILINE)
-
-        if match:
+        if match := re.search(
+            r'Exception\s*:\s*(.*)', error_message, re.MULTILINE
+        ):
             error_message = match.group(1)
 
         return error_message

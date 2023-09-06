@@ -64,7 +64,9 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
         if env_dict and "EGO_SERVICE_CREDENTIAL" in env_dict:
             self.rest_credential = env_dict["EGO_SERVICE_CREDENTIAL"]
         elif self.kernel_headers and "Jwt-Auth-User-Payload" in self.kernel_headers:
-            kwargs.get("env")["KERNEL_NOTEBOOK_COOKIE_JAR"] = "kernelcookie" + str(randint(0, 1000))
+            kwargs.get("env")[
+                "KERNEL_NOTEBOOK_COOKIE_JAR"
+            ] = f"kernelcookie{str(randint(0, 1000))}"
             jsonKH = json.loads(self.kernel_headers["Jwt-Auth-User-Payload"])
             self.jwt_token = jsonKH["accessToken"]
             await asyncio.get_event_loop().run_in_executor(
@@ -81,16 +83,13 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
             None, self._update_launch_info, kernel_cmd, kwargs.get("env")
         )
         # Enable stderr PIPE for the run command
-        kwargs.update({"stderr": subprocess.PIPE})
+        kwargs["stderr"] = subprocess.PIPE
         self.local_proc = self.launch_kernel(kernel_cmd, **kwargs)
         self.pid = self.local_proc.pid
         self.ip = local_ip
 
         self.log.debug(
-            "Conductor cluster kernel launched using Conductor endpoint: {}, pid: {}, Kernel ID: {}, "
-            "cmd: '{}'".format(
-                self.conductor_endpoint, self.local_proc.pid, self.kernel_id, kernel_cmd
-            )
+            f"Conductor cluster kernel launched using Conductor endpoint: {self.conductor_endpoint}, pid: {self.local_proc.pid}, Kernel ID: {self.kernel_id}, cmd: '{kernel_cmd}'"
         )
         await self.confirm_remote_startup()
         return self
@@ -111,11 +110,7 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
         # add SPARK_HOME, PYSPARK_PYTHON, update SPARK_OPT to contain SPARK_MASTER and EGO_SERVICE_CREDENTIAL
         env_dict["SPARK_HOME"] = env_dict["KERNEL_SPARK_HOME"]
         env_dict["PYSPARK_PYTHON"] = env_dict["KERNEL_PYSPARK_PYTHON"]
-        # add KERNEL_SPARK_OPTS to append user configured Spark configuration
-        user_defined_spark_opts = ""
-        if "KERNEL_SPARK_OPTS" in env_dict:
-            user_defined_spark_opts = env_dict["KERNEL_SPARK_OPTS"]
-
+        user_defined_spark_opts = env_dict.get("KERNEL_SPARK_OPTS", "")
         # Get updated one_notebook_master_rest_url for KERNEL_NOTEBOOK_MASTER_REST and SPARK_OPTS.
         if self.jwt_token is None:
             self._update_notebook_master_rest_url(env_dict)
@@ -126,7 +121,7 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
                 "--conf spark.pyspark.python={pyspark_python} {spark_opts} "
                 "{user_defined_spark_opts}".format(
                     master=env_dict["KERNEL_NOTEBOOK_MASTER_REST"],
-                    rest_cred="'" + self.rest_credential + "'",
+                    rest_cred=f"'{self.rest_credential}'",
                     pyspark_python=env_dict["PYSPARK_PYTHON"],
                     spark_opts=env_dict["SPARK_OPTS"],
                     user_defined_spark_opts=user_defined_spark_opts,
@@ -143,7 +138,7 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
         response = None
         # Assemble REST call
         header = "Accept: application/json"
-        authorization = "Authorization: %s" % self.rest_credential
+        authorization = f"Authorization: {self.rest_credential}"
         if (
             "KERNEL_NOTEBOOK_DATA_DIR" not in env_dict
             or "KERNEL_NOTEBOOK_COOKIE_JAR" not in env_dict
@@ -189,9 +184,7 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
                 response = None
         except Exception as e:
             self.log.warning(
-                "Getting instance group with cmd '{}' failed with exception: '{}'.  Continuing...".format(
-                    cmd, e
-                )
+                f"Getting instance group with cmd '{cmd}' failed with exception: '{e}'.  Continuing..."
             )
             return
 
@@ -227,9 +220,7 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
 
         if updated_one_notebook_master_rest_url and updated_one_notebook_master_web_submission_url:
             self.log.debug(
-                "Updating KERNEL_NOTEBOOK_MASTER_REST to '{}'.".format(
-                    updated_one_notebook_master_rest_url
-                )
+                f"Updating KERNEL_NOTEBOOK_MASTER_REST to '{updated_one_notebook_master_rest_url}'."
             )
             os.environ["KERNEL_NOTEBOOK_MASTER_REST"] = updated_one_notebook_master_rest_url
             env_dict["KERNEL_NOTEBOOK_MASTER_REST"] = updated_one_notebook_master_rest_url
@@ -274,15 +265,14 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
         if self.driver_id:
             resp = self._kill_app_by_driver_id(self.driver_id)
             self.log.debug(
-                "ConductorClusterProcessProxy.kill: kill_app_by_driver_id({}) response: {}, confirming "
-                "app state is not RUNNING".format(self.driver_id, resp)
+                f"ConductorClusterProcessProxy.kill: kill_app_by_driver_id({self.driver_id}) response: {resp}, confirming app state is not RUNNING"
             )
             i = 1
             state = self._query_app_state_by_driver_id(self.driver_id)
             while state not in ConductorClusterProcessProxy.final_states and i <= max_poll_attempts:
                 time.sleep(poll_interval)
                 state = self._query_app_state_by_driver_id(self.driver_id)
-                i = i + 1
+                i += 1
 
             if state in ConductorClusterProcessProxy.final_states:
                 result = None
@@ -290,9 +280,7 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
         super().kill()
 
         self.log.debug(
-            "ConductorClusterProcessProxy.kill, application ID: {}, kernel ID: {}, state: {}".format(
-                self.application_id, self.kernel_id, state
-            )
+            f"ConductorClusterProcessProxy.kill, application ID: {self.application_id}, kernel ID: {self.kernel_id}, state: {state}"
         )
         return result
 
@@ -302,9 +290,7 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
         # a local_proc.
         if self.local_proc:
             self.log.debug(
-                "ConductorClusterProcessProxy.cleanup: Clearing possible defunct process, pid={}...".format(
-                    self.local_proc.pid
-                )
+                f"ConductorClusterProcessProxy.cleanup: Clearing possible defunct process, pid={self.local_proc.pid}..."
             )
             if super().poll():
                 super().kill()
@@ -322,30 +308,30 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
         Parse driver id from stderr gotten back from launch_kernel
         :param submission_response
         """
-        if submission_response:
-            self.log.debug(f"Submission Response: {submission_response}\n")
-            matched_lines = [
-                line for line in submission_response.split("\n") if "submissionId" in line
-            ]
-            if matched_lines and len(matched_lines) > 0:
-                driver_info = matched_lines[0]
-                self.log.debug(f"Driver Info: {driver_info}")
-                driver_id = driver_info.split(":")[1]
-                driver_id = re.findall(r'"([^"]*)"', driver_id)
-                if driver_id and len(driver_id) > 0:
-                    self.driver_id = driver_id[0]
-                    self.log.debug(f"Driver ID: {driver_id[0]}")
-            # Handle Checking for submission error to report
-            err_lines = [
-                line
-                for line in submission_response.split("\n")
-                if "Application submission failed" in line
-            ]
-            if err_lines and len(err_lines) > 0:
-                self.log_and_raise(
-                    http_status_code=500,
-                    reason=err_lines[0][err_lines[0].find("Application submission failed") :],
-                )
+        if not submission_response:
+            return
+        self.log.debug(f"Submission Response: {submission_response}\n")
+        if matched_lines := [
+            line
+            for line in submission_response.split("\n")
+            if "submissionId" in line
+        ]:
+            driver_info = matched_lines[0]
+            self.log.debug(f"Driver Info: {driver_info}")
+            driver_id = driver_info.split(":")[1]
+            driver_id = re.findall(r'"([^"]*)"', driver_id)
+            if driver_id and len(driver_id) > 0:
+                self.driver_id = driver_id[0]
+                self.log.debug(f"Driver ID: {driver_id[0]}")
+        if err_lines := [
+            line
+            for line in submission_response.split("\n")
+            if "Application submission failed" in line
+        ]:
+            self.log_and_raise(
+                http_status_code=500,
+                reason=err_lines[0][err_lines[0].find("Application submission failed") :],
+            )
 
     async def confirm_remote_startup(self) -> None:
         """
@@ -369,18 +355,11 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
                 app_state = self._get_application_state()
 
                 if app_state in ConductorClusterProcessProxy.final_states:
-                    error_message = (
-                        "KernelID: '{}', ApplicationID: '{}' unexpectedly found in state '{}' "
-                        "during kernel startup!".format(
-                            self.kernel_id, self.application_id, app_state
-                        )
-                    )
+                    error_message = f"KernelID: '{self.kernel_id}', ApplicationID: '{self.application_id}' unexpectedly found in state '{app_state}' during kernel startup!"
                     self.log_and_raise(http_status_code=500, reason=error_message)
 
                 self.log.debug(
-                    "{}: State: '{}', Host: '{}', KernelID: '{}', ApplicationID: '{}'".format(
-                        i, app_state, self.assigned_host, self.kernel_id, self.application_id
-                    )
+                    f"{i}: State: '{app_state}', Host: '{self.assigned_host}', KernelID: '{self.kernel_id}', ApplicationID: '{self.application_id}'"
                 )
 
                 if self.assigned_host:
@@ -394,9 +373,7 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
         has been identified, it is no longer accessed.
         """
         app_state = None
-        apps = self._query_app_by_driver_id(self.driver_id)
-
-        if apps:
+        if apps := self._query_app_by_driver_id(self.driver_id):
             for app in apps:
                 if "state" in app:
                     app_state = app["state"]
@@ -416,9 +393,7 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
         )
 
         if time_interval > self.kernel_launch_timeout:
-            reason = "Application failed to start within {} seconds.".format(
-                self.kernel_launch_timeout
-            )
+            reason = f"Application failed to start within {self.kernel_launch_timeout} seconds."
             error_http_code = 500
             if self._get_application_id(True):
                 if self._query_app_state_by_driver_id(self.driver_id) != "WAITING":
@@ -431,12 +406,10 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
                     )
                     error_http_code = 503
                 else:
-                    reason = "App {} is WAITING, but waited too long ({} secs) to get connection file".format(
-                        self.application_id, self.kernel_launch_timeout
-                    )
+                    reason = f"App {self.application_id} is WAITING, but waited too long ({self.kernel_launch_timeout} secs) to get connection file"
             await asyncio.get_event_loop().run_in_executor(None, self.kill)
-            timeout_message = "KernelID: '{}' launch timeout due to: {}".format(
-                self.kernel_id, reason
+            timeout_message = (
+                f"KernelID: '{self.kernel_id}' launch timeout due to: {reason}"
             )
             self.log_and_raise(http_status_code=error_http_code, reason=timeout_message)
 
@@ -460,22 +433,15 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
                             self.start_time, RemoteProcessProxy.get_current_time()
                         )
                         self.log.info(
-                            "ApplicationID: '{}' assigned for KernelID: '{}', state: {}, "
-                            "{} seconds after starting.".format(
-                                app["applicationid"], self.kernel_id, app["state"], time_interval
-                            )
+                            f"""ApplicationID: '{app["applicationid"]}' assigned for KernelID: '{self.kernel_id}', state: {app["state"]}, {time_interval} seconds after starting."""
                         )
                     else:
                         self.log.debug(
-                            "ApplicationID not yet assigned for KernelID: '{}' - retrying...".format(
-                                self.kernel_id
-                            )
+                            f"ApplicationID not yet assigned for KernelID: '{self.kernel_id}' - retrying..."
                         )
             else:
                 self.log.debug(
-                    "ApplicationID not yet assigned for KernelID: '{}' - retrying...".format(
-                        self.kernel_id
-                    )
+                    f"ApplicationID not yet assigned for KernelID: '{self.kernel_id}' - retrying..."
                 )
         return self.application_id
 
@@ -508,7 +474,7 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
         # Assemble REST call
         env = self.env
         header = "Accept: application/json"
-        authorization = "Authorization: %s" % self.rest_credential
+        authorization = f"Authorization: {self.rest_credential}"
         cookie_jar = pjoin(env["KERNEL_NOTEBOOK_DATA_DIR"], env["KERNEL_NOTEBOOK_COOKIE_JAR"])
         sslconf = env["KERNEL_CURL_SECURITY_OPT"].split()
         url = f"{self.conductor_endpoint}/v1/applications?driverid={driver_id}"
@@ -525,9 +491,7 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
             response = None if not response or not response["applist"] else response["applist"]
         except Exception as e:
             self.log.warning(
-                "Getting application with cmd '{}' failed with exception: '{}'.  Continuing...".format(
-                    cmd, e
-                )
+                f"Getting application with cmd '{cmd}' failed with exception: '{e}'.  Continuing..."
             )
         return response
 
@@ -541,7 +505,7 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
         # Assemble REST call
         env = self.env
         header = "Accept: application/json"
-        authorization = "Authorization: %s" % self.rest_credential
+        authorization = f"Authorization: {self.rest_credential}"
         cookie_jar = pjoin(env["KERNEL_NOTEBOOK_DATA_DIR"], env["KERNEL_NOTEBOOK_COOKIE_JAR"])
         sslconf = env["KERNEL_CURL_SECURITY_OPT"].split()
         url = f"{self.conductor_endpoint}/v1/applications?applicationid={app_id}"
@@ -557,9 +521,7 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
             response = None if response is None or not response["applist"] else response["applist"]
         except Exception as e:
             self.log.warning(
-                "Getting application with cmd '{}' failed with exception: '{}'.  Continuing...".format(
-                    cmd, e
-                )
+                f"Getting application with cmd '{cmd}' failed with exception: '{e}'.  Continuing..."
             )
         return response
 
@@ -570,8 +532,7 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
         :return:
         """
         response = None
-        apps = self._query_app_by_driver_id(driver_id)
-        if apps:
+        if apps := self._query_app_by_driver_id(driver_id):
             for app in apps:
                 if "state" in app:
                     response = app["state"]
@@ -584,11 +545,10 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
         :return: The JSON response driver information of the corresponding application. None if app_id is not found.
         """
         response = None
-        apps = self._query_app_by_id(app_id)
-        if apps:
+        if apps := self._query_app_by_id(app_id):
             for app in apps:
                 if app and app["driver"]:
-                    self.log.debug("Obtain Driver ID: {}".format(app["driver"]["id"]))
+                    self.log.debug(f'Obtain Driver ID: {app["driver"]["id"]}')
                     response = app["driver"]
         else:
             self.log.warning("Application id does not exist")
@@ -605,12 +565,9 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
             if self.application_id is None:
                 return None
             self.log.debug(
-                "Driver does not exist, retrieving DriverID with ApplicationID: {}".format(
-                    self.application_id
-                )
+                f"Driver does not exist, retrieving DriverID with ApplicationID: {self.application_id}"
             )
-            driver_info = self._get_driver_by_app_id(self.application_id)
-            if driver_info:
+            if driver_info := self._get_driver_by_app_id(self.application_id):
                 self.driver_id = driver_info["id"]
             else:
                 return None
@@ -619,7 +576,7 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
         response = None
         env = self.env
         header = "Accept: application/json"
-        authorization = "Authorization: %s" % self.rest_credential
+        authorization = f"Authorization: {self.rest_credential}"
         cookie_jar = pjoin(env["KERNEL_NOTEBOOK_DATA_DIR"], env["KERNEL_NOTEBOOK_COOKIE_JAR"])
         sslconf = env["KERNEL_CURL_SECURITY_OPT"].split()
         url = f"{self.conductor_endpoint}/v1/submissions/kill/{self.driver_id}"
@@ -635,9 +592,7 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
             response = json.loads(output) if output else None
         except Exception as e:
             self.log.warning(
-                "Termination of application with cmd '{}' failed with exception: '{}'.  Continuing...".format(
-                    cmd, e
-                )
+                f"Termination of application with cmd '{cmd}' failed with exception: '{e}'.  Continuing..."
             )
         self.log.debug(f"Kill response: {response}")
         return response
@@ -646,7 +601,7 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
         for HA in HA_LIST:
             portcolon = url.rfind(":")
             slash = url.find("://")
-            url = url[0 : slash + 3] + HA + url[portcolon:]
+            url = url[:slash + 3] + HA + url[portcolon:]
             cmd[-1] = url
             self.log.debug(cmd)
             process = subprocess.Popen(
@@ -699,34 +654,32 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
         HA_LIST.insert(0, host)
 
         header = "Accept: application/json"
-        authorization = "Authorization: Bearer %s" % jwt_token
+        authorization = f"Authorization: Bearer {jwt_token}"
         cookie_jar = pjoin(env["KERNEL_NOTEBOOK_DATA_DIR"], env["KERNEL_NOTEBOOK_COOKIE_JAR"])
         sslconf = env["KERNEL_CURL_SECURITY_OPT"].split()
-        url = "{}/auth/logon/jwt?topology={}".format(self.ascd_endpoint, env["KERNEL_TOPOLOGY"])
+        url = f'{self.ascd_endpoint}/auth/logon/jwt?topology={env["KERNEL_TOPOLOGY"]}'
         cmd = ["curl", "-v", "-b", cookie_jar, "-X", "GET", "-H", header, "-H", authorization, url]
         cmd[2:2] = sslconf
         output, stderr = self._performRestCall(cmd, url, HA_LIST)
         if "Error" in output:
-            reasonErr = "Failed to perform JWT Auth Logon. " + output.splitlines()[0]
+            reasonErr = f"Failed to perform JWT Auth Logon. {output.splitlines()[0]}"
             self.log.warning(cmd)
             self.log_and_raise(http_status_code=500, reason=reasonErr)
         self.rest_credential = url_unescape(output)[1:-1]
 
         # Assemble EGO Token Logon REST call
         authorization = "Authorization: PlatformToken token=" + output.strip('"')
-        url = "%s/auth/logon" % self.ascd_endpoint
+        url = f"{self.ascd_endpoint}/auth/logon"
         cmd = ["curl", "-v", "-c", cookie_jar, "-X", "GET", "-H", header, "-H", authorization, url]
         cmd[2:2] = sslconf
         output, stderr = self._performRestCall(cmd, url, HA_LIST)
         if "Error" in output:
-            reasonErr = "Failed to perform EGO Auth Logon. " + output.splitlines()[0]
+            reasonErr = f"Failed to perform EGO Auth Logon. {output.splitlines()[0]}"
             self.log.warning(cmd)
             self.log_and_raise(http_status_code=500, reason=reasonErr)
 
         # Get the Python path to use to make sure the right conda environment is used
-        url = "{}/anaconda/instances/{}".format(
-            self.ascd_endpoint, env["KERNEL_ANACONDA_INST_UUID"]
-        )
+        url = f'{self.ascd_endpoint}/anaconda/instances/{env["KERNEL_ANACONDA_INST_UUID"]}'
         cmd = ["curl", "-v", "-b", cookie_jar, "-X", "GET", "-H", header, "-H", authorization, url]
         cmd[2:2] = sslconf
         output, stderr = self._performRestCall(cmd, url, HA_LIST)
@@ -745,10 +698,7 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
             )
 
         # Get instance group information we need
-        url = "{}/instances?id={}&fields=sparkinstancegroup,outputs".format(
-            self.ascd_endpoint,
-            env["KERNEL_IG_UUID"],
-        )
+        url = f'{self.ascd_endpoint}/instances?id={env["KERNEL_IG_UUID"]}&fields=sparkinstancegroup,outputs'
         cmd = ["curl", "-v", "-b", cookie_jar, "-X", "GET", "-H", header, "-H", authorization, url]
         cmd[2:2] = sslconf
         output, stderr = self._performRestCall(cmd, url, HA_LIST)
@@ -762,11 +712,7 @@ class ConductorClusterProcessProxy(RemoteProcessProxy):
             )
             self.log.warning(cmd)
             self.log_and_raise(http_status_code=500, reason=reasonErr)
-        elif (
-            response is None
-            or response[0] is None
-            or "value" not in response[0]["outputs"]["batch_master_rest_urls"]
-        ):
+        elif "value" not in response[0]["outputs"]["batch_master_rest_urls"]:
             reasonErr = (
                 "Could not retrieve outputs for instance group. Verify instance group with id "
                 + env["KERNEL_IG_UUID"]

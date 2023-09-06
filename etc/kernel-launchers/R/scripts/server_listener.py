@@ -53,8 +53,7 @@ def _encrypt(connection_info_str, public_key):
         "key": encrypted_key.decode(),
         "conn_info": b64_connection_info.decode(),
     }
-    b64_payload = base64.b64encode(json.dumps(payload).encode(encoding="utf-8"))
-    return b64_payload
+    return base64.b64encode(json.dumps(payload).encode(encoding="utf-8"))
 
 
 def return_connection_info(
@@ -67,8 +66,7 @@ def return_connection_info(
     response_parts = response_addr.split(":")
     if len(response_parts) != 2:
         logger.error(
-            "Invalid format for response address '{}'. "
-            "Assuming 'pull' mode...".format(response_addr)
+            f"Invalid format for response address '{response_addr}'. Assuming 'pull' mode..."
         )
         return
 
@@ -77,8 +75,7 @@ def return_connection_info(
         response_port = int(response_parts[1])
     except ValueError:
         logger.error(
-            "Invalid port component found in response address '{}'. "
-            "Assuming 'pull' mode...".format(response_addr)
+            f"Invalid port component found in response address '{response_addr}'. Assuming 'pull' mode..."
         )
         return
 
@@ -113,9 +110,7 @@ def prepare_comm_socket(lower_port, upper_port):
     """
     sock = _select_socket(lower_port, upper_port)
     logger.info(
-        "Signal socket bound to host: {}, port: {}".format(
-            sock.getsockname()[0], sock.getsockname()[1]
-        )
+        f"Signal socket bound to host: {sock.getsockname()[0]}, port: {sock.getsockname()[1]}"
     )
     sock.listen(1)
     sock.settimeout(5)
@@ -153,9 +148,7 @@ def _select_socket(lower_port, upper_port):
         except Exception:
             retries = retries + 1
             if retries > max_port_range_retries:
-                msg = "Failed to locate port within range {}..{} after {} retries!".format(
-                    lower_port, upper_port, max_port_range_retries
-                )
+                msg = f"Failed to locate port within range {lower_port}..{upper_port} after {max_port_range_retries} retries!"
                 raise RuntimeError(msg) from None
     return sock
 
@@ -166,9 +159,7 @@ def _get_candidate_port(lower_port, upper_port):
     This code also exists in the Python kernel-launcher's launch_ipykernel.py script.
     """
     range_size = upper_port - lower_port
-    if range_size == 0:
-        return 0
-    return random.randint(lower_port, upper_port)
+    return 0 if range_size == 0 else random.randint(lower_port, upper_port)
 
 
 def get_server_request(sock):
@@ -206,8 +197,7 @@ def server_listener(sock, parent_pid):
     """
     shutdown = False
     while not shutdown:
-        request = get_server_request(sock)
-        if request:
+        if request := get_server_request(sock):
             signum = -1  # prevent logging poll requests since that occurs every 3 seconds
             if request.get("signum") is not None:
                 signum = int(request.get("signum"))
@@ -238,7 +228,7 @@ def setup_server_listener(
         control_port=ports[4],
     )
     if response_addr:
-        comm_socket = return_connection_info(
+        if comm_socket := return_connection_info(
             conn_filename,
             response_addr,
             int(lower_port),
@@ -246,8 +236,7 @@ def setup_server_listener(
             kernel_id,
             public_key,
             int(parent_pid),
-        )
-        if comm_socket:  # socket in use, start server listener thread
+        ):
             server_listener_thread = Thread(
                 target=server_listener,
                 args=(

@@ -56,12 +56,12 @@ class PythonKernelBaseTestCase(TestBase):
         self.kernel.start_interrupt_thread()
 
         # Build the code list to interrupt, in this case, its a sleep call.
-        interrupted_code = []
-        interrupted_code.append("import time\n")
-        interrupted_code.append("print('begin')\n")
-        interrupted_code.append("time.sleep(60)\n")
-        interrupted_code.append("print('end')\n")
-
+        interrupted_code = [
+            "import time\n",
+            "print('begin')\n",
+            "time.sleep(60)\n",
+            "print('end')\n",
+        ]
         interrupted_result, has_error = self.kernel.execute(interrupted_code)
 
         # Ensure the result indicates an interrupt occurred
@@ -81,12 +81,13 @@ class PythonKernelBaseTestCase(TestBase):
         # Ensure global variable is accessible in function.
         # See https://github.com/jupyter-server/enterprise_gateway/issues/687
         # Build the example code...
-        scope_code = []
-        scope_code.append("a = 42\n")
-        scope_code.append("def scope():\n")
-        scope_code.append("    return a\n")
-        scope_code.append("\n")
-        scope_code.append("scope()\n")
+        scope_code = [
+            "a = 42\n",
+            "def scope():\n",
+            "    return a\n",
+            "\n",
+            "scope()\n",
+        ]
         result, has_error = self.kernel.execute(scope_code)
         self.assertEqual(result, str(42))
         self.assertEqual(has_error, False)
@@ -119,17 +120,18 @@ class PythonKernelBaseSparkTestCase(PythonKernelBaseTestCase):
 
     def test_run_pi_example(self):
         # Build the example code...
-        pi_code = []
-        pi_code.append("from random import random\n")
-        pi_code.append("from operator import add\n")
-        pi_code.append("partitions = 20\n")
-        pi_code.append("n = 100000 * partitions\n")
-        pi_code.append("def f(_):\n")
-        pi_code.append("    x = random() * 2 - 1\n")
-        pi_code.append("    y = random() * 2 - 1\n")
-        pi_code.append("    return 1 if x ** 2 + y ** 2 <= 1 else 0\n")
-        pi_code.append("count = sc.parallelize(range(1, n + 1), partitions).map(f).reduce(add)\n")
-        pi_code.append('print("Pi is roughly %f" % (4.0 * count / n))\n')
+        pi_code = [
+            "from random import random\n",
+            "from operator import add\n",
+            "partitions = 20\n",
+            "n = 100000 * partitions\n",
+            "def f(_):\n",
+            "    x = random() * 2 - 1\n",
+            "    y = random() * 2 - 1\n",
+            "    return 1 if x ** 2 + y ** 2 <= 1 else 0\n",
+            "count = sc.parallelize(range(1, n + 1), partitions).map(f).reduce(add)\n",
+            'print("Pi is roughly %f" % (4.0 * count / n))\n',
+        ]
         result, has_error = self.kernel.execute(pi_code)
         self.assertRegex(result, "Pi is roughly 3.14*")
         self.assertEqual(has_error, False)

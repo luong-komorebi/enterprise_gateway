@@ -55,8 +55,7 @@ class CORSMixin:
         super().set_default_headers()
         # Add CORS headers after default if they have a non-blank value
         for settings_name, header_name in self.SETTINGS_TO_HEADERS.items():
-            header_value = self.settings.get(settings_name)
-            if header_value:
+            if header_value := self.settings.get(settings_name):
                 self.set_header(header_name, header_value)
 
         # Don't set CSP: we're not serving frontend media types, only JSON
@@ -147,9 +146,7 @@ class JSONErrorsMixin:
                 reply["message"] = "Unknown server error"
                 reply["traceback"] = "".join(traceback.format_exception(*exc_info))
 
-            # Construct the custom reason, if defined
-            custom_reason = getattr(exception, "reason", "")
-            if custom_reason:
+            if custom_reason := getattr(exception, "reason", ""):
                 reply["reason"] = custom_reason
 
         self.set_header("Content-Type", "application/json")
@@ -572,7 +569,7 @@ class EnterpriseGatewayConfigMixin(Configurable):
 
     @default("impersonation_enabled")
     def _impersonation_enabled_default(self) -> bool:
-        return bool(os.getenv(self.impersonation_enabled_env, "false").lower() == "true")
+        return os.getenv(self.impersonation_enabled_env, "false").lower() == "true"
 
     # Unauthorized users
     unauthorized_users_env = "EG_UNAUTHORIZED_USERS"

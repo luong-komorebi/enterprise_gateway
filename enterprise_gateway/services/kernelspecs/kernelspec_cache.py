@@ -95,8 +95,7 @@ class KernelSpecCache(SingletonConfigurable):
         """
         kernelspec = None
         if self.cache_enabled:
-            cache_item = self.cache_items.get(kernel_name.lower())
-            if cache_item:  # Convert to KernelSpec
+            if cache_item := self.cache_items.get(kernel_name.lower()):
                 # In certain conditions, like when the kernelspec is fetched prior to its removal from the cache,
                 # we can encounter a FileNotFoundError.  In those cases, treat as a cache miss as well.
                 try:
@@ -205,16 +204,16 @@ class KernelSpecCache(SingletonConfigurable):
     @staticmethod
     def kernel_spec_to_cache_item(kernelspec: KernelSpec) -> CacheItemType:
         """Converts a KernelSpec instance to a CacheItemType for storage into the cache."""
-        cache_item = {}
-        cache_item["spec"] = kernelspec.to_dict()
+        cache_item = {"spec": kernelspec.to_dict()}
         cache_item["resource_dir"] = kernelspec.resource_dir
         return cache_item
 
     @staticmethod
     def cache_item_to_kernel_spec(cache_item: CacheItemType) -> KernelSpec:
         """Converts a CacheItemType to a KernelSpec instance for user consumption."""
-        kernel_spec = KernelSpec(resource_dir=cache_item["resource_dir"], **cache_item["spec"])
-        return kernel_spec
+        return KernelSpec(
+            resource_dir=cache_item["resource_dir"], **cache_item["spec"]
+        )
 
 
 class KernelSpecChangeHandler(FileSystemEventHandler):
