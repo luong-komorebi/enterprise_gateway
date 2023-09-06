@@ -171,12 +171,10 @@ class SessionManager(LoggingConfigurable):
         # multiple columns are never passed into kwargs so just using the
         # first and only one.
         column = list(kwargs.keys())[0]
-        row = self.get_session_by_key(column, kwargs[column])
-
-        if not row:
-            raise web.HTTPError(404, "Session not found: %s" % kwargs[column])
-
-        return self.row_to_model(row)
+        if row := self.get_session_by_key(column, kwargs[column]):
+            return self.row_to_model(row)
+        else:
+            raise web.HTTPError(404, f"Session not found: {kwargs[column]}")
 
     def update_session(self, session_id: str, *args, **kwargs) -> None:
         """Updates the values in the session store.
@@ -232,12 +230,11 @@ class SessionManager(LoggingConfigurable):
             self._sessions.remove(row)
             raise KeyError
 
-        model = {
+        return {
             "id": row["session_id"],
             "notebook": {"path": row["path"]},
             "kernel": self.kernel_manager.kernel_model(row["kernel_id"]),
         }
-        return model
 
     def list_sessions(self, *args, **kwargs) -> List[dict]:
         """Returns a list of dictionaries containing all the information from

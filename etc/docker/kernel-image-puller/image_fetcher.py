@@ -49,7 +49,7 @@ class KernelSpecsFetcher(ImageNameFetcher):
         headers = {"Content-Type": "application/json"}
         if self.auth_token:
             end_point += f"?token={self.auth_token}"
-            headers.update({"Authorization": f"token {self.auth_token}"})
+            headers["Authorization"] = f"token {self.auth_token}"
         resp = requests.get(end_point, headers=headers, verify=self.validate_cert, timeout=60)
         if not resp.ok:
             msg = f"Gateway server response: {resp.status_code}"

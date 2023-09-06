@@ -44,18 +44,17 @@ def import_item(name: str):
     """
 
     parts = name.rsplit(".", 1)
-    if len(parts) == 2:
-        # called with 'foo.bar....'
-        package, obj = parts
-        module = __import__(package, fromlist=[obj])
-        try:
-            pak = getattr(module, obj)
-        except AttributeError:
-            raise ImportError("No module named %s" % obj) from None
-        return pak
-    else:
+    if len(parts) != 2:
         # called with un-dotted string
         return __import__(parts[0])
+    # called with 'foo.bar....'
+    package, obj = parts
+    module = __import__(package, fromlist=[obj])
+    try:
+        pak = getattr(module, obj)
+    except AttributeError:
+        raise ImportError(f"No module named {obj}") from None
+    return pak
 
 
 def get_process_proxy_config(kernelspec: KernelSpec) -> dict[str, Any]:
@@ -113,9 +112,7 @@ def new_kernel_id(**kwargs: dict[str, Any] | None) -> str:
                 raise ValueError(msg)
         except ValueError as ve:
             log.error(
-                "Invalid v4 UUID value detected in ['env']['KERNEL_ID']: '{}'!  Error: {}".format(
-                    str_kernel_id, ve
-                )
+                f"Invalid v4 UUID value detected in ['env']['KERNEL_ID']: '{str_kernel_id}'!  Error: {ve}"
             )
             raise ve
         # user-provided id is valid, use it
@@ -192,7 +189,7 @@ class RemoteMappingKernelManager(AsyncMappingKernelManager):
         """Check that a kernel_id exists and raise 404 if not."""
         if kernel_id not in self and not self._refresh_kernel(kernel_id):
             self.parent.kernel_session_manager.delete_session(kernel_id)
-            raise web.HTTPError(404, "Kernel does not exist: %s" % kernel_id)
+            raise web.HTTPError(404, f"Kernel does not exist: {kernel_id}")
 
     def _refresh_kernel(self, kernel_id: str) -> bool:
         if self.parent.availability_mode == EnterpriseGatewayConfigMixin.AVAILABILITY_REPLICATION:
@@ -252,7 +249,7 @@ class RemoteMappingKernelManager(AsyncMappingKernelManager):
             await super().shutdown_kernel(kernel_id, now, restart)
         except KeyError as ke:  # this is hint for multiple shutdown request.
             self.log.exception(f"Exception while shutting down kernel: '{kernel_id}': {ke}")
-            raise web.HTTPError(404, "Kernel does not exist: %s" % kernel_id) from None
+            raise web.HTTPError(404, f"Kernel does not exist: {kernel_id}") from None
 
     async def wait_for_restart_finish(self, kernel_id: str, action: str = "shutdown") -> None:
         """Wait for a kernel restart to finish."""
@@ -286,37 +283,22 @@ class RemoteMappingKernelManager(AsyncMappingKernelManager):
             ) = RemoteMappingKernelManager.pending_requests.get_counts(username)
 
             # Enforce overall limit...
-            if self.parent.max_kernels is not None:
-                active_and_pending = len(self.list_kernels()) + pending_all
-                if active_and_pending >= self.parent.max_kernels:
-                    error_message = (
-                        "A max kernels limit has been set to {} and there are "
-                        "currently {} active and pending {}.".format(
-                            self.parent.max_kernels,
-                            active_and_pending,
-                            "kernel" if active_and_pending == 1 else "kernels",
-                        )
-                    )
-                    self.log.error(error_message)
-                    raise web.HTTPError(403, error_message)
+        if self.parent.max_kernels is not None:
+            active_and_pending = len(self.list_kernels()) + pending_all
+            if active_and_pending >= self.parent.max_kernels:
+                error_message = f'A max kernels limit has been set to {self.parent.max_kernels} and there are currently {active_and_pending} active and pending {"kernel" if active_and_pending == 1 else "kernels"}.'
+                self.log.error(error_message)
+                raise web.HTTPError(403, error_message)
 
             # Enforce per-user limit...
-            if self.parent.max_kernels_per_user >= 0 and self.parent.kernel_session_manager:
-                active_and_pending = (
-                    self.parent.kernel_session_manager.active_sessions(username) + pending_user
-                )
-                if active_and_pending >= self.parent.max_kernels_per_user:
-                    error_message = (
-                        "A max kernels per user limit has been set to {} and user '{}' "
-                        "currently has {} active and pending {}.".format(
-                            self.parent.max_kernels_per_user,
-                            username,
-                            active_and_pending,
-                            "kernel" if active_and_pending == 1 else "kernels",
-                        )
-                    )
-                    self.log.error(error_message)
-                    raise web.HTTPError(403, error_message)
+        if self.parent.max_kernels_per_user >= 0 and self.parent.kernel_session_manager:
+            active_and_pending = (
+                self.parent.kernel_session_manager.active_sessions(username) + pending_user
+            )
+            if active_and_pending >= self.parent.max_kernels_per_user:
+                error_message = f"""A max kernels per user limit has been set to {self.parent.max_kernels_per_user} and user '{username}' currently has {active_and_pending} active and pending {"kernel" if active_and_pending == 1 else "kernels"}."""
+                self.log.error(error_message)
+                raise web.HTTPError(403, error_message)
         return
 
     def remove_kernel(self, kernel_id: str) -> None:
@@ -372,7 +354,9 @@ class RemoteMappingKernelManager(AsyncMappingKernelManager):
 
         # Construct a kernel manager...
         km = self.kernel_manager_factory(
-            connection_file=os.path.join(self.connection_dir, "kernel-%s.json" % kernel_id),
+            connection_file=os.path.join(
+                self.connection_dir, f"kernel-{kernel_id}.json"
+            ),
             parent=self,
             log=self.log,
             kernel_name=kernel_name,
@@ -405,9 +389,7 @@ class RemoteMappingKernelManager(AsyncMappingKernelManager):
             lambda: self._handle_kernel_died(kernel_id),
             "dead",
         )
-        # Only initialize culling if available.  Warning message will be issued in gatewayapp at startup.
-        func = getattr(self, "initialize_culler", None)
-        if func:
+        if func := getattr(self, "initialize_culler", None):
             func()
         return True
 
@@ -570,13 +552,10 @@ class RemoteKernelManager(EnterpriseGatewayConfigMixin, AsyncIOLoopKernelManager
             del env["KG_AUTH_TOKEN"]
 
         self.log.debug(
-            "Launching kernel: '{}' with command: {}".format(
-                self.kernel_spec.display_name, kernel_cmd
-            )
+            f"Launching kernel: '{self.kernel_spec.display_name}' with command: {kernel_cmd}"
         )
 
-        proxy = await self.process_proxy.launch_process(kernel_cmd, **kwargs)
-        return proxy
+        return await self.process_proxy.launch_process(kernel_cmd, **kwargs)
 
     def request_shutdown(self, restart: bool = False) -> None:
         """
@@ -620,8 +599,7 @@ class RemoteKernelManager(EnterpriseGatewayConfigMixin, AsyncIOLoopKernelManager
         ):
             if self.mapping_kernel_manager._kernel_connections.get(kernel_id, 0) == 0:
                 self.log.warning(
-                    "Remote kernel ({}) will not be automatically restarted since there are no "
-                    "clients connected at this time.".format(kernel_id)
+                    f"Remote kernel ({kernel_id}) will not be automatically restarted since there are no clients connected at this time."
                 )
                 # Use the parent mapping kernel manager so activity monitoring and culling is also shutdown
                 await self.mapping_kernel_manager.shutdown_kernel(kernel_id, now=now)
@@ -648,39 +626,29 @@ class RemoteKernelManager(EnterpriseGatewayConfigMixin, AsyncIOLoopKernelManager
         """
         Sends signal `signum` to the kernel process.
         """
-        if self.has_kernel:
-            if signum == signal.SIGINT:
-                if self.sigint_value is None:
-                    # If we're interrupting the kernel, check if kernelspec's env defines
-                    # an alternate interrupt signal.  We'll do this once per interrupted kernel.
-                    # This is required for kernels whose language may prevent signals across
-                    # process/user boundaries (Scala, for example).
-                    self.sigint_value = signum  # use default
-                    alt_sigint = self.kernel_spec.env.get("EG_ALTERNATE_SIGINT")
-                    if alt_sigint:
-                        try:
-                            sig_value = getattr(signal, alt_sigint)
-                            if type(sig_value) is int:  # Python 2
-                                self.sigint_value = sig_value
-                            else:  # Python 3
-                                self.sigint_value = sig_value.value
-                            self.log.debug(
-                                "Converted EG_ALTERNATE_SIGINT '{}' to value '{}' to use as interrupt signal.".format(
-                                    alt_sigint, self.sigint_value
-                                )
-                            )
-                        except AttributeError:
-                            self.log.warning(
-                                "Error received when attempting to convert EG_ALTERNATE_SIGINT of "
-                                "'{}' to a value. Check kernelspec entry for kernel '{}' - using "
-                                "default 'SIGINT'".format(alt_sigint, self.kernel_spec.display_name)
-                            )
-                self.kernel.send_signal(self.sigint_value)
-            else:
-                self.kernel.send_signal(signum)
+        if not self.has_kernel:
+            raise RuntimeError("Cannot signal kernel. No kernel is running!")
+        if signum == signal.SIGINT:
+            if self.sigint_value is None:
+                # If we're interrupting the kernel, check if kernelspec's env defines
+                # an alternate interrupt signal.  We'll do this once per interrupted kernel.
+                # This is required for kernels whose language may prevent signals across
+                # process/user boundaries (Scala, for example).
+                self.sigint_value = signum  # use default
+                if alt_sigint := self.kernel_spec.env.get("EG_ALTERNATE_SIGINT"):
+                    try:
+                        sig_value = getattr(signal, alt_sigint)
+                        self.sigint_value = sig_value if type(sig_value) is int else sig_value.value
+                        self.log.debug(
+                            f"Converted EG_ALTERNATE_SIGINT '{alt_sigint}' to value '{self.sigint_value}' to use as interrupt signal."
+                        )
+                    except AttributeError:
+                        self.log.warning(
+                            f"Error received when attempting to convert EG_ALTERNATE_SIGINT of '{alt_sigint}' to a value. Check kernelspec entry for kernel '{self.kernel_spec.display_name}' - using default 'SIGINT'"
+                        )
+            self.kernel.send_signal(self.sigint_value)
         else:
-            msg = "Cannot signal kernel. No kernel is running!"
-            raise RuntimeError(msg)
+            self.kernel.send_signal(signum)
 
     def cleanup(self, connection_file: bool = True) -> None:
         """
@@ -749,9 +717,7 @@ class RemoteKernelManager(EnterpriseGatewayConfigMixin, AsyncIOLoopKernelManager
         process_proxy_cfg = get_process_proxy_config(self.kernel_spec)
         process_proxy_class_name = process_proxy_cfg.get("class_name")
         self.log.debug(
-            "Instantiating kernel '{}' with process proxy: {}".format(
-                self.kernel_spec.display_name, process_proxy_class_name
-            )
+            f"Instantiating kernel '{self.kernel_spec.display_name}' with process proxy: {process_proxy_class_name}"
         )
         process_proxy_class = import_item(process_proxy_class_name)
         self.process_proxy = process_proxy_class(

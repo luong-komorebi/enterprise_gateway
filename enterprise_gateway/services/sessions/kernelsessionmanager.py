@@ -52,9 +52,10 @@ class KernelSessionManager(LoggingConfigurable):
 
     @default("enable_persistence")
     def _session_persistence_default(self) -> bool:
-        return bool(
+        return (
             os.getenv(
-                self.session_persistence_env, str(self.session_persistence_default_value)
+                self.session_persistence_env,
+                str(self.session_persistence_default_value),
             ).lower()
             == "true"
         )
@@ -96,9 +97,10 @@ reside.  This directory should exist.  (EG_PERSISTENCE_ROOT env var)""",
         km = self.kernel_manager.get_kernel(kernel_id)
 
         # Compose the kernel_session entry
-        kernel_session = {}
-        kernel_session["kernel_id"] = kernel_id
-        kernel_session["username"] = KernelSessionManager.get_kernel_username(**kwargs)
+        kernel_session = {
+            "kernel_id": kernel_id,
+            "username": KernelSessionManager.get_kernel_username(**kwargs),
+        }
         kernel_session["kernel_name"] = km.kernel_name
 
         # Build the inner dictionaries: connection_info, process_proxy and add to kernel_session
@@ -133,12 +135,9 @@ reside.  This directory should exist.  (EG_PERSISTENCE_ROOT env var)""",
             self._sessions[kernel_id] = kernel_session
             username = kernel_session["username"]
             if username not in self._sessionsByUser:
-                self._sessionsByUser[username] = []
+                self._sessionsByUser[username] = [kernel_id]
+            elif kernel_id not in self._sessionsByUser[username]:
                 self._sessionsByUser[username].append(kernel_id)
-            else:
-                # Only append if not there yet (e.g. restarts will be there already)
-                if kernel_id not in self._sessionsByUser[username]:
-                    self._sessionsByUser[username].append(kernel_id)
             self.save_session(kernel_id)  # persist changes in file/DB etc.
         finally:
             kernels_lock.release()
@@ -146,9 +145,7 @@ reside.  This directory should exist.  (EG_PERSISTENCE_ROOT env var)""",
     def start_session(self, kernel_id: str) -> bool | None:
         """Start a session for a given kernel."""
         kernel_session = self._sessions.get(kernel_id, None)
-        if kernel_session is not None:
-            return self._start_session(kernel_session)
-        return None
+        return None if kernel_session is None else self._start_session(kernel_session)
 
     def start_sessions(self) -> None:
         """
@@ -157,26 +154,25 @@ reside.  This directory should exist.  (EG_PERSISTENCE_ROOT env var)""",
         Determines if session startup was successful.  If unsuccessful, the session is removed
         from persistent storage.
         """
-        if self.enable_persistence:
-            self.load_sessions()
-            sessions_to_remove = []
-            for kernel_id, kernel_session in self._sessions.items():
+        if not self.enable_persistence:
+            return
+        self.load_sessions()
+        sessions_to_remove = []
+        for kernel_id, kernel_session in self._sessions.items():
+            self.log.info(
+                f"Attempting startup of persisted kernel session for id: {kernel_id}..."
+            )
+            if self._start_session(kernel_session):
                 self.log.info(
-                    "Attempting startup of persisted kernel session for id: %s..." % kernel_id
+                    f"Startup of persisted kernel session for id '{kernel_id}' was successful.  Client should reconnect kernel."
                 )
-                if self._start_session(kernel_session):
-                    self.log.info(
-                        "Startup of persisted kernel session for id '{}' was successful.  Client should "
-                        "reconnect kernel.".format(kernel_id)
-                    )
-                else:
-                    sessions_to_remove.append(kernel_id)
-                    self.log.warning(
-                        "Startup of persisted kernel session for id '{}' was not successful.  Check if "
-                        "client is still active and restart kernel.".format(kernel_id)
-                    )
+            else:
+                sessions_to_remove.append(kernel_id)
+                self.log.warning(
+                    f"Startup of persisted kernel session for id '{kernel_id}' was not successful.  Check if client is still active and restart kernel."
+                )
 
-            self._delete_sessions(sessions_to_remove)
+        self._delete_sessions(sessions_to_remove)
 
     def _start_session(self, kernel_session: dict) -> bool:
         # Attempt to start kernel from persisted state.  if started, record kernel_session in dictionary
@@ -189,10 +185,7 @@ reside.  This directory should exist.  (EG_PERSISTENCE_ROOT env var)""",
             process_info=kernel_session["process_info"],
             launch_args=kernel_session["launch_args"],
         )
-        if not kernel_started:
-            return False
-
-        return True
+        return bool(kernel_started)
 
     def delete_session(self, kernel_id: str) -> None:
         """
@@ -201,7 +194,7 @@ reside.  This directory should exist.  (EG_PERSISTENCE_ROOT env var)""",
         self._delete_sessions([kernel_id])
 
         if self.enable_persistence:
-            self.log.info("Deleted persisted kernel session for id: %s" % kernel_id)
+            self.log.info(f"Deleted persisted kernel session for id: {kernel_id}")
 
     def _delete_sessions(self, kernel_ids: list[str]) -> None:
         # Remove unstarted sessions and rewrite
@@ -230,8 +223,7 @@ reside.  This directory should exist.  (EG_PERSISTENCE_ROOT env var)""",
         session_info = session[kernel_id]
         if session_info.get("connection_info"):
             info = session_info["connection_info"]
-            key = info.get("key")
-            if key:
+            if key := info.get("key"):
                 info["key"] = key.decode("utf8")
 
         return session
@@ -243,8 +235,7 @@ reside.  This directory should exist.  (EG_PERSISTENCE_ROOT env var)""",
         session_info = session[kernel_id]
         if session_info.get("connection_info"):
             info = session_info["connection_info"]
-            key = info.get("key")
-            if key:
+            if key := info.get("key"):
                 info["key"] = key.encode("utf8")
 
         return session
@@ -357,8 +348,7 @@ class FileKernelSessionManager(KernelSessionManager):
         if self.enable_persistence and kernel_id is not None:
             kernel_file_name = "".join([kernel_id, ".json"])
             kernel_session_file_path = os.path.join(self._get_sessions_loc(), kernel_file_name)
-            temp_session = {}
-            temp_session[kernel_id] = self._sessions[kernel_id]
+            temp_session = {kernel_id: self._sessions[kernel_id]}
             with open(kernel_session_file_path, "w") as fp:
                 json.dump(KernelSessionManager.pre_save_transformation(temp_session), fp)
                 fp.close()
@@ -494,8 +484,7 @@ class WebhookKernelSessionManager(KernelSessionManager):
         :param string kernel_id: A kernel id
         """
         if self.enable_persistence and kernel_id is not None:
-            temp_session = {}
-            temp_session[kernel_id] = self._sessions[kernel_id]
+            temp_session = {kernel_id: self._sessions[kernel_id]}
             body = KernelSessionManager.pre_save_transformation(temp_session)
             response = requests.post(
                 f"{self.webhook_url}/{kernel_id}", auth=self.auth, json=body, timeout=60

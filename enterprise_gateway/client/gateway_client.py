@@ -53,7 +53,7 @@ class GatewayClient:
             "KERNEL_USERNAME": username,
             "KERNEL_LAUNCH_TIMEOUT": GatewayClient.KERNEL_LAUNCH_TIMEOUT,
         }
-        env.update(extra_env)
+        env |= extra_env
 
         json_data = {
             "name": kernelspec_name,
@@ -66,9 +66,7 @@ class GatewayClient:
             kernel_id = json_data.get("id")
             self.log.info(f"Started kernel with id {kernel_id}")
         else:
-            msg = "Error starting kernel : {} response code \n {}".format(
-                response.status_code, response.content
-            )
+            msg = f"Error starting kernel : {response.status_code} response code \n {response.content}"
             raise RuntimeError(msg)
 
         return KernelClient(
@@ -175,21 +173,14 @@ class KernelClient:
                     ):
                         has_error = True
                         response.append(
-                            "{}:{}:{}".format(
-                                response_message["content"]["ename"],
-                                response_message["content"]["evalue"],
-                                response_message["content"]["traceback"],
-                            )
+                            f'{response_message["content"]["ename"]}:{response_message["content"]["evalue"]}:{response_message["content"]["traceback"]}'
                         )
                     elif response_message_type == "stream":
                         response.append(
                             KernelClient._convert_raw_response(response_message["content"]["text"])
                         )
 
-                    elif (
-                        response_message_type == "execute_result"
-                        or response_message_type == "display_data"
-                    ):
+                    elif response_message_type in ["execute_result", "display_data"]:
                         if "text/plain" in response_message["content"]["data"]:
                             response.append(
                                 KernelClient._convert_raw_response(
@@ -208,9 +199,7 @@ class KernelClient:
                             continue
                     else:
                         self.log.debug(
-                            "Unhandled response for msg_id: {} of msg_type: {}".format(
-                                msg_id, response_message_type
-                            )
+                            f"Unhandled response for msg_id: {msg_id} of msg_type: {response_message_type}"
                         )
 
                 if (
@@ -218,9 +207,7 @@ class KernelClient:
                 ):  # We timed out.  If post idle, its ok, else make mention of it
                     if not post_idle:
                         self.log.warning(
-                            "Unexpected timeout occurred for msg_id: {} - no 'idle' status received!".format(
-                                msg_id
-                            )
+                            f"Unexpected timeout occurred for msg_id: {msg_id} - no 'idle' status received!"
                         )
                     break
 
@@ -231,15 +218,13 @@ class KernelClient:
 
     def interrupt(self):
         """Interrupt the kernel."""
-        url = "{}/{}".format(self.kernel_http_api_endpoint, "interrupt")
+        url = f"{self.kernel_http_api_endpoint}/interrupt"
         response = requests.post(url, timeout=60)
         if response.status_code == 204:
             self.log.debug(f"Kernel {self.kernel_id} interrupted")
             return True
         else:
-            msg = "Unexpected response interrupting kernel {}: {}".format(
-                self.kernel_id, response.content
-            )
+            msg = f"Unexpected response interrupting kernel {self.kernel_id}: {response.content}"
             raise RuntimeError(msg)
 
     def restart(self, timeout=REQUEST_TIMEOUT):
@@ -247,7 +232,7 @@ class KernelClient:
         self.restarting = True
         self.kernel_socket.close()
         self.kernel_socket = None
-        url = "{}/{}".format(self.kernel_http_api_endpoint, "restart")
+        url = f"{self.kernel_http_api_endpoint}/restart"
         response = requests.post(url, timeout=60)
         if response.status_code == 200:
             self.log.debug(f"Kernel {self.kernel_id} restarted")
@@ -271,9 +256,7 @@ class KernelClient:
             self.log.debug(f"Kernel {self.kernel_id} state: {json}")
             return json["execution_state"]
         else:
-            msg = "Unexpected response retrieving state for kernel {}: {}".format(
-                self.kernel_id, response.content
-            )
+            msg = f"Unexpected response retrieving state for kernel {self.kernel_id}: {response.content}"
             raise RuntimeError(msg)
 
     def start_interrupt_thread(self, wait_time=DEFAULT_INTERRUPT_WAIT):
@@ -326,9 +309,7 @@ class KernelClient:
             self.log.debug(f"Getting response for msg_id: {msg_id} with timeout: {timeout}")
             response = msg_queue.get(timeout=timeout)
             self.log.debug(
-                "Got response for msg_id: {}, msg_type: {}".format(
-                    msg_id, response["msg_type"] if response else "null"
-                )
+                f'Got response for msg_id: {msg_id}, msg_type: {response["msg_type"] if response else "null"}'
             )
         except queue.Empty:
             response = None
@@ -357,9 +338,7 @@ class KernelClient:
 
                     # insert into queue
                     self.log.debug(
-                        "Inserting response for msg_id: {}, msg_type: {}".format(
-                            msg_id, response_message["msg_type"]
-                        )
+                        f'Inserting response for msg_id: {msg_id}, msg_type: {response_message["msg_type"]}'
                     )
                     self.response_queues.get(msg_id).put_nowait(response_message)
                 except BaseException as be1:

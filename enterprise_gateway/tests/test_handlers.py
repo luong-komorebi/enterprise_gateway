@@ -66,9 +66,7 @@ class TestHandlers(TestGatewayAppBase):
 
         # Connect to the kernel via websocket
         kernel = json_decode(response.body)
-        ws_url = "ws://localhost:{}/api/kernels/{}/channels".format(
-            self.get_http_port(), url_escape(kernel["id"])
-        )
+        ws_url = f'ws://localhost:{self.get_http_port()}/api/kernels/{url_escape(kernel["id"])}/channels'
 
         ws = yield websocket_connect(ws_url)
         raise Return(ws)
@@ -232,9 +230,7 @@ class TestDefaults(TestHandlers):
         self.assertEqual(response.code, 200)
 
         # Request websocket connection without the token
-        ws_url = "ws://localhost:{}/api/kernels/{}/channels".format(
-            self.get_http_port(), url_escape(kernel["id"])
-        )
+        ws_url = f'ws://localhost:{self.get_http_port()}/api/kernels/{url_escape(kernel["id"])}/channels'
         # No option to ignore errors so try/except
         try:
             ws = yield websocket_connect(ws_url)

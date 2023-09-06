@@ -108,10 +108,9 @@ def kernel_spec_manager(environ, setup_kernelspecs):
 
 @pytest.fixture
 def kernel_spec_cache(is_enabled, kernel_spec_manager):
-    kspec_cache = KernelSpecCache.instance(
+    yield KernelSpecCache.instance(
         kernel_spec_manager=kernel_spec_manager, cache_enabled=is_enabled
     )
-    yield kspec_cache
     kspec_cache = None
     KernelSpecCache.clear_instance()
 

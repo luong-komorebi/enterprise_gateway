@@ -35,12 +35,7 @@ def generate_kernel_pod_yaml(keywords):
             default=True,
         ),
     )
-    # jinja2 template substitutes template variables with None though keywords doesn't
-    # contain corresponding item. Therefore, no need to check if any are left unsubstituted.
-    # Kubernetes API server will validate the pod spec instead.
-    k8s_yaml = j_env.get_template(KERNEL_POD_TEMPLATE_PATH).render(**keywords)
-
-    return k8s_yaml
+    return j_env.get_template(KERNEL_POD_TEMPLATE_PATH).render(**keywords)
 
 
 def extend_pod_env(pod_def: dict) -> dict:
@@ -102,9 +97,6 @@ def launch_kubernetes_kernel(
     else:
         config.load_kube_config()
 
-    # Capture keywords and their values.
-    keywords = {}
-
     # Factory values...
     # Since jupyter lower cases the kernel directory as the kernel-name, we need to capture its case-sensitive
     # value since this is used to locate the kernel launch script within the image.
@@ -127,12 +119,11 @@ def launch_kubernetes_kernel(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )
 
-    # Walk env variables looking for names prefixed with KERNEL_.  When found, set corresponding keyword value
-    # with name in lower case.
-    for name, value in os.environ.items():
-        if name.startswith("KERNEL_"):
-            keywords[name.lower()] = yaml.safe_load(value)
-
+    keywords = {
+        name.lower(): yaml.safe_load(value)
+        for name, value in os.environ.items()
+        if name.startswith("KERNEL_")
+    }
     # Substitute all template variable (wrapped with {{ }}) and generate `yaml` string.
     k8s_yaml = generate_kernel_pod_yaml(keywords)
 
@@ -184,9 +175,10 @@ def launch_kubernetes_kernel(
                             body=k8s_obj, namespace=kernel_namespace
                         )
                     except ApiException as exc:
-                        if _parse_k8s_exception(exc) == K8S_ALREADY_EXIST_REASON:
-                            pass
-                        else:
+                        if (
+                            _parse_k8s_exception(exc)
+                            != K8S_ALREADY_EXIST_REASON
+                        ):
                             raise exc
             elif k8s_obj["kind"] == "PersistentVolume":
                 if pod_template_file is None:
@@ -260,36 +252,27 @@ def _get_spark_resources(pod_template: Dict) -> str:
     # The config value names below are pulled from:
     # https://spark.apache.org/docs/latest/running-on-kubernetes.html#container-spec
     spark_resources = ""
-    containers = pod_template.get("spec", {}).get("containers", [])
-    if containers:
-        # We're just dealing with single-container pods at this time.
-        resources = containers[0].get("resources", {})
-        if resources:
-            requests = resources.get("requests", {})
-            if requests:
-                cpu_request = requests.get("cpu")
-                if cpu_request:
+    if containers := pod_template.get("spec", {}).get("containers", []):
+        if resources := containers[0].get("resources", {}):
+            if requests := resources.get("requests", {}):
+                if cpu_request := requests.get("cpu"):
                     spark_resources += (
                         f"--conf spark.driver.cores={cpu_request} "
                         f"--conf spark.executor.cores={cpu_request} "
                     )
-                memory_request = requests.get("memory")
-                if memory_request:
+                if memory_request := requests.get("memory"):
                     spark_resources += (
                         f"--conf spark.driver.memory={memory_request} "
                         f"--conf spark.executor.memory={memory_request} "
                     )
 
-            limits = resources.get("limits", {})
-            if limits:
-                cpu_limit = limits.get("cpu")
-                if cpu_limit:
+            if limits := resources.get("limits", {}):
+                if cpu_limit := limits.get("cpu"):
                     spark_resources += (
                         f"--conf spark.kubernetes.driver.limit.cores={cpu_limit} "
                         f"--conf spark.kubernetes.executor.limit.cores={cpu_limit} "
                     )
-                memory_limit = limits.get("memory")
-                if memory_limit:
+                if memory_limit := limits.get("memory"):
                     spark_resources += (
                         f"--conf spark.driver.memory={memory_limit} "
                         f"--conf spark.executor.memory={memory_limit} "

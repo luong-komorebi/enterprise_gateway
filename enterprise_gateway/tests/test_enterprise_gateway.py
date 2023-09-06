@@ -154,7 +154,7 @@ class TestEnterpriseGateway(TestHandlers):
     def test_dynamic_updates(self):
         app = self.app  # Get the actual EnterpriseGatewayApp instance
         s1 = time.time()
-        name = app.config_file_name + ".py"
+        name = f"{app.config_file_name}.py"
         with TemporaryDirectory("_1") as td1:
             os.environ["JUPYTER_CONFIG_DIR"] = td1
             config_file = pjoin(td1, name)

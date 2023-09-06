@@ -72,8 +72,7 @@ class MainKernelSpecHandler(TokenAuthorizationMixin, CORSMixin, JSONErrorsMixin,
         """Get the kernel spec models."""
         ksc = self.kernel_spec_cache
         km = self.kernel_manager
-        model = {}
-        model["default"] = km.default_kernel_name
+        model = {"default": km.default_kernel_name}
         model["kernelspecs"] = specs = {}
 
         kernel_user_filter = self.request.query_arguments.get("user")
@@ -81,7 +80,7 @@ class MainKernelSpecHandler(TokenAuthorizationMixin, CORSMixin, JSONErrorsMixin,
         if kernel_user_filter:
             kernel_user = kernel_user_filter[0].decode("utf-8")
             if kernel_user:
-                self.log.debug("Searching kernels for user '%s' " % kernel_user)
+                self.log.debug(f"Searching kernels for user '{kernel_user}' ")
 
         kspecs = await ensure_async(ksc.get_all_specs())
 
@@ -127,14 +126,14 @@ class KernelSpecHandler(TokenAuthorizationMixin, CORSMixin, JSONErrorsMixin, API
         """Get a kernel spec by name."""
         ksc = self.kernel_spec_cache
         kernel_name = url_unescape(kernel_name)
-        kernel_user_filter = self.request.query_arguments.get("user")
-        kernel_user = None
-        if kernel_user_filter:
+        if kernel_user_filter := self.request.query_arguments.get("user"):
             kernel_user = kernel_user_filter[0].decode("utf-8")
+        else:
+            kernel_user = None
         try:
             spec = await ensure_async(ksc.get_kernel_spec(kernel_name))
         except KeyError:
-            raise web.HTTPError(404, "Kernel spec %s not found" % kernel_name) from None
+            raise web.HTTPError(404, f"Kernel spec {kernel_name} not found") from None
         if is_kernelspec_model(spec):
             model = spec
         else:
@@ -178,7 +177,7 @@ class KernelSpecResourceHandler(
             kernelspec = await ensure_async(ksc.get_kernel_spec(kernel_name))
             self.root = kernelspec.resource_dir
         except KeyError as e:
-            raise web.HTTPError(404, "Kernel spec %s not found" % kernel_name) from e
+            raise web.HTTPError(404, f"Kernel spec {kernel_name} not found") from e
         self.log.debug("Serving kernel resource from: %s", self.root)
         return await web.StaticFileHandler.get(self, path, include_body=include_body)
 
@@ -194,6 +193,9 @@ kernel_name_regex: str = r"(?P<kernel_name>[\w\.\-%]+)"
 # and JSON errors.
 default_handlers: List[tuple] = [
     (r"/api/kernelspecs", MainKernelSpecHandler),
-    (r"/api/kernelspecs/%s" % kernel_name_regex, KernelSpecHandler),
-    (r"/kernelspecs/%s/(?P<path>.*)" % kernel_name_regex, KernelSpecResourceHandler),
+    (f"/api/kernelspecs/{kernel_name_regex}", KernelSpecHandler),
+    (
+        f"/kernelspecs/{kernel_name_regex}/(?P<path>.*)",
+        KernelSpecResourceHandler,
+    ),
 ]

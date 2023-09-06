@@ -34,8 +34,7 @@ class TrackKernelOnHost:
 
     def delete_kernel_id(self, kernel_id: str) -> None:
         """Delete a kernel id from tracking."""
-        host = self._kernel_host_mapping.get(kernel_id)
-        if host:
+        if host := self._kernel_host_mapping.get(kernel_id):
             self.decrement(host)
             del self._kernel_host_mapping[kernel_id]
 
@@ -100,20 +99,11 @@ class DistributedProcessProxy(RemoteProcessProxy):
             result_pid = self._launch_remote_process(kernel_cmd, **kwargs)
             self.pid = int(result_pid)
         except Exception as e:
-            error_message = "Failure occurred starting kernel on '{}'.  Returned result: {}".format(
-                self.ip, e
-            )
+            error_message = f"Failure occurred starting kernel on '{self.ip}'.  Returned result: {e}"
             self.log_and_raise(http_status_code=500, reason=error_message)
 
         self.log.info(
-            "Kernel launched on '{}', pid: {}, ID: {}, Log file: {}:{}, Command: '{}'.  ".format(
-                self.assigned_host,
-                self.pid,
-                self.kernel_id,
-                self.assigned_host,
-                self.kernel_log,
-                kernel_cmd,
-            )
+            f"Kernel launched on '{self.assigned_host}', pid: {self.pid}, ID: {self.kernel_id}, Log file: {self.assigned_host}:{self.kernel_log}, Command: '{kernel_cmd}'.  "
         )
         await self.confirm_remote_startup()
         return self
@@ -161,13 +151,12 @@ class DistributedProcessProxy(RemoteProcessProxy):
         if BaseProcessProxyABC.ip_is_local(self.ip):  # We're local so just use what we're given
             cmd = argv_cmd
         else:  # Add additional envs, including those in kernelspec
-            cmd = ""
-
-            for key, value in env_dict.items():
-                cmd += "export {}={};".format(key, json.dumps(value).replace("'", "''"))
-
+            cmd = "".join(
+                f"""export {key}={json.dumps(value).replace("'", "''")};"""
+                for key, value in env_dict.items()
+            )
             for key, value in self.kernel_manager.kernel_spec.env.items():
-                cmd += "export {}={};".format(key, json.dumps(value).replace("'", "''"))
+                cmd += f"""export {key}={json.dumps(value).replace("'", "''")};"""
 
             cmd += "nohup"
             for arg in argv_cmd:
@@ -207,9 +196,7 @@ class DistributedProcessProxy(RemoteProcessProxy):
             await self.handle_timeout()
 
             self.log.debug(
-                "{}: Waiting to connect.  Host: '{}', KernelID: '{}'".format(
-                    i, self.assigned_host, self.kernel_id
-                )
+                f"{i}: Waiting to connect.  Host: '{self.assigned_host}', KernelID: '{self.kernel_id}'"
             )
 
             if self.assigned_host:
@@ -223,14 +210,9 @@ class DistributedProcessProxy(RemoteProcessProxy):
         )
 
         if time_interval > self.kernel_launch_timeout:
-            reason = (
-                "Waited too long ({}s) to get connection file.  Check Enterprise Gateway log and kernel "
-                "log ({}:{}) for more information.".format(
-                    self.kernel_launch_timeout, self.assigned_host, self.kernel_log
-                )
-            )
-            timeout_message = "KernelID: '{}' launch timeout due to: {}".format(
-                self.kernel_id, reason
+            reason = f"Waited too long ({self.kernel_launch_timeout}s) to get connection file.  Check Enterprise Gateway log and kernel log ({self.assigned_host}:{self.kernel_log}) for more information."
+            timeout_message = (
+                f"KernelID: '{self.kernel_id}' launch timeout due to: {reason}"
             )
             await asyncio.get_event_loop().run_in_executor(None, self.kill)
             self.log_and_raise(http_status_code=500, reason=timeout_message)

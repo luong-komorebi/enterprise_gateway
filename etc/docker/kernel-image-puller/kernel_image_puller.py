@@ -90,8 +90,7 @@ class KernelImagePuller:
         # Fetch the image names, then wait for name queue to drain.  Once drained, or if there were issues
         # fetching the image names, wait the interval number of seconds and perform the operation again.
         while True:
-            fetched = self.fetch_image_names()
-            if fetched:
+            if fetched := self.fetch_image_names():
                 # Once we have fetched kernelspecs, update wait_interval
                 wait_interval = self.interval
                 self.worker_queue.join()

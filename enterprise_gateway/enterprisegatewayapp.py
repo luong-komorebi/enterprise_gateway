@@ -2,6 +2,7 @@
 # Distributed under the terms of the Modified BSD License.
 """Enterprise Gateway Jupyter application."""
 
+
 import asyncio
 import errno
 import getpass
@@ -43,19 +44,15 @@ try:
 except ImportError:
     AllowAllAuthorizer = object
 
-# Add additional command line aliases
-aliases = dict(base_aliases)
-aliases.update(
-    {
-        "ip": "EnterpriseGatewayApp.ip",
-        "port": "EnterpriseGatewayApp.port",
-        "port_retries": "EnterpriseGatewayApp.port_retries",
-        "keyfile": "EnterpriseGatewayApp.keyfile",
-        "certfile": "EnterpriseGatewayApp.certfile",
-        "client-ca": "EnterpriseGatewayApp.client_ca",
-        "ssl_version": "EnterpriseGatewayApp.ssl_version",
-    }
-)
+aliases = dict(base_aliases) | {
+    "ip": "EnterpriseGatewayApp.ip",
+    "port": "EnterpriseGatewayApp.port",
+    "port_retries": "EnterpriseGatewayApp.port_retries",
+    "keyfile": "EnterpriseGatewayApp.keyfile",
+    "certfile": "EnterpriseGatewayApp.certfile",
+    "client-ca": "EnterpriseGatewayApp.client_ca",
+    "ssl_version": "EnterpriseGatewayApp.ssl_version",
+}
 
 
 class EnterpriseGatewayApp(EnterpriseGatewayConfigMixin, JupyterApp):
@@ -148,15 +145,12 @@ class EnterpriseGatewayApp(EnterpriseGatewayConfigMixin, JupyterApp):
                     f"Kernel session persistence is enabled but availability mode is not.  "
                     f"Setting EnterpriseGatewayApp.availability_mode to '{self.availability_mode}'."
                 )
-        else:
-            # Persistence is not enabled, check if availability_mode is configured and, if so,
-            # auto-enable persistence
-            if self.availability_mode is not None:
-                self.kernel_session_manager.enable_persistence = True
-                self.log.info(
-                    f"Availability mode is set to '{self.availability_mode}' yet kernel session "
-                    "persistence is not enabled.  Enabling kernel session persistence."
-                )
+        elif self.availability_mode is not None:
+            self.kernel_session_manager.enable_persistence = True
+            self.log.info(
+                f"Availability mode is set to '{self.availability_mode}' yet kernel session "
+                "persistence is not enabled.  Enabling kernel session persistence."
+            )
 
         # If we're using single-instance availability, attempt to start persisted sessions
         if self.availability_mode == EnterpriseGatewayConfigMixin.AVAILABILITY_STANDALONE:
@@ -309,19 +303,14 @@ class EnterpriseGatewayApp(EnterpriseGatewayConfigMixin, JupyterApp):
         super().start()
 
         self.log.info(
-            "Jupyter Enterprise Gateway {} is available at http{}://{}:{}".format(
-                EnterpriseGatewayApp.version, "s" if self.keyfile else "", self.ip, self.port
-            )
+            f'Jupyter Enterprise Gateway {EnterpriseGatewayApp.version} is available at http{"s" if self.keyfile else ""}://{self.ip}:{self.port}'
         )
         # If impersonation is enabled, issue a warning message if the gateway user is not in unauthorized_users.
         if self.impersonation_enabled:
             gateway_user = getpass.getuser()
             if gateway_user.lower() not in self.unauthorized_users:
                 self.log.warning(
-                    "Impersonation is enabled and gateway user '{}' is NOT specified in the set of "
-                    "unauthorized users!  Kernels may execute as that user with elevated privileges.".format(
-                        gateway_user
-                    )
+                    f"Impersonation is enabled and gateway user '{gateway_user}' is NOT specified in the set of unauthorized users!  Kernels may execute as that user with elevated privileges."
                 )
 
         self.io_loop = ioloop.IOLoop.current()
@@ -379,7 +368,6 @@ class EnterpriseGatewayApp(EnterpriseGatewayConfigMixin, JupyterApp):
         :return: True if updates were taken
         """
         updated = False
-        configs = []
         for file in self.loaded_config_files:
             mod_time = int(os.path.getmtime(file))
             if mod_time > self._last_config_update:
@@ -394,6 +382,7 @@ class EnterpriseGatewayApp(EnterpriseGatewayConfigMixin, JupyterApp):
 
             self.load_config_file(self)
 
+            configs = []
             for config_name, configurable in self._dynamic_configurables.items():
                 # Since Application.load_config_file calls update_config on the Application, skip
                 # the configurable registered with self (i.e., the application).
@@ -402,8 +391,7 @@ class EnterpriseGatewayApp(EnterpriseGatewayConfigMixin, JupyterApp):
                 configs.append(config_name)
 
             self.log.info(
-                "Configuration file changes detected.  Instances for the following "
-                "configurables have been updated: {}".format(configs)
+                f"Configuration file changes detected.  Instances for the following configurables have been updated: {configs}"
             )
         return updated
 
@@ -427,31 +415,30 @@ class EnterpriseGatewayApp(EnterpriseGatewayConfigMixin, JupyterApp):
         options - that are not privy to dynamic updates.
         :return:
         """
-        if self.dynamic_config_interval > 0:
-            self.add_dynamic_configurable("EnterpriseGatewayApp", self)
-            self.add_dynamic_configurable("MappingKernelManager", self.kernel_manager)
-            self.add_dynamic_configurable("KernelSpecManager", self.kernel_spec_manager)
-            self.add_dynamic_configurable("KernelSessionManager", self.kernel_session_manager)
+        if self.dynamic_config_interval <= 0:
+            return
+        self.add_dynamic_configurable("EnterpriseGatewayApp", self)
+        self.add_dynamic_configurable("MappingKernelManager", self.kernel_manager)
+        self.add_dynamic_configurable("KernelSpecManager", self.kernel_spec_manager)
+        self.add_dynamic_configurable("KernelSessionManager", self.kernel_session_manager)
 
-            self.log.info(
-                "Dynamic updates have been configured.  Checking every {} seconds.".format(
-                    self.dynamic_config_interval
-                )
+        self.log.info(
+            f"Dynamic updates have been configured.  Checking every {self.dynamic_config_interval} seconds."
+        )
+
+        self.log.info(
+            "The following configuration options will not be subject to dynamic updates "
+            "(configured via CLI):"
+        )
+        for config, options in self.cli_config.items():
+            for option, value in options.items():
+                self.log.info(f"    '{config}.{option}': '{value}'")
+
+        if self.dynamic_config_poller is None:
+            self.dynamic_config_poller = ioloop.PeriodicCallback(
+                self.update_dynamic_configurables, self.dynamic_config_interval * 1000
             )
-
-            self.log.info(
-                "The following configuration options will not be subject to dynamic updates "
-                "(configured via CLI):"
-            )
-            for config, options in self.cli_config.items():
-                for option, value in options.items():
-                    self.log.info(f"    '{config}.{option}': '{value}'")
-
-            if self.dynamic_config_poller is None:
-                self.dynamic_config_poller = ioloop.PeriodicCallback(
-                    self.update_dynamic_configurables, self.dynamic_config_interval * 1000
-                )
-            self.dynamic_config_poller.start()
+        self.dynamic_config_poller.start()
 
 
 launch_instance = EnterpriseGatewayApp.launch_instance

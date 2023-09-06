@@ -147,19 +147,16 @@ class WaitingForSparkSessionToBeInitialized:
     # call to the real Spark objects
     def __getattr__(self, name):
         """Handle attribute getter."""
-        # ignore tab-completion request for __members__ or __methods__ and ignore meta property requests
         if name.startswith("__") or name.startswith("_ipython_") or name.startswith("_repr_"):
             return
-        else:
-            # wait on thread to initialize the Spark session variables in global variable scope
-            self._init_thread.join(timeout=None)
-            exc = self._init_thread.exc
-            if exc:
-                msg = f"Variable: {self._spark_session_variable} was not initialized properly."
-                raise RuntimeError(msg) from exc
+        # wait on thread to initialize the Spark session variables in global variable scope
+        self._init_thread.join(timeout=None)
+        if exc := self._init_thread.exc:
+            msg = f"Variable: {self._spark_session_variable} was not initialized properly."
+            raise RuntimeError(msg) from exc
 
-            # now return attribute/function reference from actual Spark object
-            return getattr(self._namespace[self._spark_session_variable], name)
+        # now return attribute/function reference from actual Spark object
+        return getattr(self._namespace[self._spark_session_variable], name)
 
 
 def _validate_port_range(port_range):
@@ -193,10 +190,10 @@ def determine_connection_file(conn_file, kid):
     """If the directory exists, use the original file, else create a temporary file."""
     if conn_file is None or not os.path.exists(os.path.dirname(conn_file)):
         if kid is not None:
-            basename = "kernel-" + kid
+            basename = f"kernel-{kid}"
         else:
             basename = os.path.splitext(os.path.basename(conn_file))[0]
-        fd, conn_file = tempfile.mkstemp(suffix=".json", prefix=basename + "_")
+        fd, conn_file = tempfile.mkstemp(suffix=".json", prefix=f"{basename}_")
         os.close(fd)
         logger.debug(f"Using connection file '{conn_file}'.")
 
@@ -227,8 +224,7 @@ def _encrypt(connection_info_str, public_key):
         "key": encrypted_key.decode(),
         "conn_info": b64_connection_info.decode(),
     }
-    b64_payload = base64.b64encode(json.dumps(payload).encode(encoding="utf-8"))
-    return b64_payload
+    return base64.b64encode(json.dumps(payload).encode(encoding="utf-8"))
 
 
 def return_connection_info(
@@ -338,9 +334,7 @@ def _get_candidate_port(lower_port, upper_port):
     This code also exists in the R kernel-launcher's server_listener.py script.
     """
     range_size = upper_port - lower_port
-    if range_size == 0:
-        return 0
-    return random.randint(lower_port, upper_port)
+    return 0 if range_size == 0 else random.randint(lower_port, upper_port)
 
 
 def get_server_request(sock):
@@ -398,8 +392,7 @@ def server_listener(sock, parent_pid, cluster_type):
     """
     shutdown = False
     while not shutdown:
-        request = get_server_request(sock)
-        if request:
+        if request := get_server_request(sock):
             signum = -1  # prevent logging poll requests since that occurs every 3 seconds
             if request.get("signum") is not None:
                 signum = int(request.get("signum"))
@@ -427,18 +420,17 @@ def import_item(name):
     """
 
     parts = name.rsplit(".", 1)
-    if len(parts) == 2:
-        # called with 'foo.bar....'
-        package, obj = parts
-        module = __import__(package, fromlist=[obj])
-        try:
-            pak = getattr(module, obj)
-        except AttributeError:
-            raise ImportError("No module named %s" % obj) from None
-        return pak
-    else:
+    if len(parts) != 2:
         # called with un-dotted string
         return __import__(parts[0])
+    # called with 'foo.bar....'
+    package, obj = parts
+    module = __import__(package, fromlist=[obj])
+    try:
+        pak = getattr(module, obj)
+    except AttributeError:
+        raise ImportError(f"No module named {obj}") from None
+    return pak
 
 
 def start_ipython(
@@ -619,10 +611,14 @@ if __name__ == "__main__":
             control_port=ports[4],
         )
         if response_addr:
-            comm_socket = return_connection_info(
-                connection_file, response_addr, lower_port, upper_port, kernel_id, public_key
-            )
-            if comm_socket:  # socket in use, start server listener process
+            if comm_socket := return_connection_info(
+                connection_file,
+                response_addr,
+                lower_port,
+                upper_port,
+                kernel_id,
+                public_key,
+            ):
                 server_listener_process = Process(
                     target=server_listener,
                     args=(

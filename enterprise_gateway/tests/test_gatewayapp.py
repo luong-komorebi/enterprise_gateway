@@ -24,7 +24,7 @@ class TestGatewayAppConfig(unittest.TestCase):
     def tearDown(self):
         """Resets the environment."""
         os.environ.clear()
-        os.environ.update(self.environ)
+        os.environ |= self.environ
 
     def _assert_envs_to_traitlets(self, env_prefix: str):
         app = EnterpriseGatewayApp()
